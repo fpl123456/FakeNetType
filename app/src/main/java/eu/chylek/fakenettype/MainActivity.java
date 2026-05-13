@@ -26,7 +26,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        prefs = getSharedPreferences("config", MODE_WORLD_READABLE);
+        // MODE_PRIVATE：兼容 Android 7+（MODE_WORLD_READABLE 已废弃，Android 24+ 抛 SecurityException）
+        prefs = getSharedPreferences("config", MODE_PRIVATE);
+        setTheme(android.R.style.Theme_Material_Light_NoActionBar);
 
         ScrollView scroll = new ScrollView(this);
         LinearLayout layout = new LinearLayout(this);
