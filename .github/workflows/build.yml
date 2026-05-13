@@ -23,22 +23,45 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
-    - name: Download XposedBridgeAPI.jar
+    - name: Download or create XposedBridgeAPI.jar
       run: |
         mkdir -p app/libs
-        curl -L -o app/libs/XposedBridgeAPI.jar \
-          https://github.com/rovo89/XposedBridge/raw/art/api/XposedBridgeApi.jar \
-          || echo "Download failed, using stub"
+        # Try official XposedBridge repo first
+        curl -sL "https://github.com/rovo89/XposedBridge/raw/art/api/82/XposedBridgeApi.jar" -o app/libs/XposedBridgeAPI.jar
+        # If download fails or file is too small, create stub
+        if [ ! -s app/libs/XposedBridgeAPI.jar ]; then
+          curl -sL "https://github.com/rovo89/XposedBridge/raw/master/api/82/XposedBridgeApi.jar" -o app/libs/XposedBridgeAPI.jar
+        fi
+        if [ ! -s app/libs/XposedBridgeAPI.jar ]; then
+          # Create a minimal stub JAR for compilation
+          mkdir -p stub/de/robv/android/xposed
+          echo "package de.robv.android.xposed;" > stub/de/robv/android/xposed/IXposedHookLoadPackage.java
+          echo "public interface IXposedHookLoadPackage { void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable; }" >> stub/de/robv/android/xposed/IXposedHookLoadPackage.java
+          echo "package de.robv.android.xposed;" > stub/de/robv/android/xposed/XC_LoadPackage.java
+          echo "public class XC_LoadPackage { public static class LoadPackageParam { public String packageName; public Object appInfo; public Object loadedApk; } }" >> stub/de/robv/android/xposed/XC_LoadPackage.java
+          echo "package de.robv.android.xposed;" > stub/de/robv/android/xposed/XC_MethodHook.java
+          echo "public abstract class XC_MethodHook { protected void beforeHookedMethod(MethodHookParam param) throws Throwable {} protected void afterHookedMethod(MethodHookParam param) throws Throwable {} public static class MethodHookParam { public Object thisObject; public Object[] args; public Object result; public Object getResult() { return result; } public void setResult(Object r) { result = r; } } }" >> stub/de/robv/android/xposed/XC_MethodHook.java
+          echo "package de.robv.android.xposed;" > stub/de/robv/android/xposed/XposedBridge.java
+          echo "public class XposedBridge { public static void log(String msg) { System.out.println(msg); } public static Object invokeOriginalMethod(Object method, Object thisObject, Object[] args) { return null; } }" >> stub/de/robv/android/xposed/XposedBridge.java
+          echo "package de.robv.android.xposed;" > stub/de/robv/android/xposed/XposedHelpers.java
+          echo "public class XposedHelpers { public static Object getObjectField(Object obj, String field) { return null; } public static void setObjectField(Object obj, String field, Object value) {} public static Object callMethod(Object obj, String method, Object... args) { return null; } public static Object callStaticMethod(Class<?> clazz, String method, Object... args) { return null; } public static Class<?> findClass(String className, ClassLoader cl) { return null; } public static Object findAndHookMethod(Class<?> clazz, String methodName, Object... paramTypes) { return null; } }" >> stub/de/robv/android/xposed/XposedHelpers.java
+          echo "package de.robv.android.xposed.callbacks;" > stub/de/robv/android/xposed/callbacks/XC_LoadPackage.java
+          echo "package de.robv.android.xposed;" > stub/de/robv/android/xposed/callbacks/package.java
+          echo "package de.robv.android.xposed.callbacks; import de.robv.android.xposed.*; public class XC_LoadPackage { public static class LoadPackageParam { public String packageName; } }" > stub/de/robv/android/xposed/callbacks/XC_LoadPackage.java
+          cd stub && find . -name "*.java" | xargs javac -d .. && cd .. && jar cf app/libs/XposedBridgeAPI.jar de/robv/android/xposed/*.class de/robv/android/xposed/callbacks/*.class 2>/dev/null
+          echo "Created stub XposedBridgeAPI.jar"
+        fi
+        ls -la app/libs/
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
-    - name: Build with Gradle
-      run: ./gradlew assembleRelease --no-daemon || ./gradlew assembleDebug --no-daemon
+    - name: Build with Gradle (Debug)
+      run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-    - name: Upload APK
+    - name: Upload Debug APK
       uses: actions/upload-artifact@v4
       with:
-        name: FakeNetType-APK
-        path: app/build/outputs/apk/**/*.apk
+        name: FakeNetType-Debug-APK
+        path: app/build/outputs/apk/debug/*.apk
         if-no-files-found: error
