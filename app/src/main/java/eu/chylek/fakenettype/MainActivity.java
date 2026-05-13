@@ -108,7 +108,7 @@ public class MainActivity extends Activity {
     }
 
     private void loadSettings() {
-        cbGlobal setChecked(prefs.getBoolean("global_enable", true));
+        cbGlobal.setChecked(prefs.getBoolean("global_enable", true));
         int typeIdx = 0;
         int savedType = prefs.getInt("fake_type", 9);
         for (int i = 0; i < typeValues.length; i++) {

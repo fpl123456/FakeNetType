@@ -16,7 +16,7 @@ import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XSharedPreferences;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.calbacks.XC_LoadPackage;
+import de.robv.android.xposed.XC_LoadPackage;
 
 /**
  * FakeNetType - Xposed/LSPosed 模块
