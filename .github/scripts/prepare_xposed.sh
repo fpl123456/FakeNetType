@@ -120,9 +120,13 @@ EOF
 
 cat > stub_src/de/robv/android/xposed/XSharedPreferences.java <<'EOF'
 package de.robv.android.xposed;
-import android.content.SharedPreferences;
 import java.util.Set;
-public class XSharedPreferences implements SharedPreferences {
+import java.util.HashSet;
+/**
+ * Standalone stub - does NOT extend android.content.SharedPreferences
+ * so it compiles without Android SDK on the build host.
+ */
+public class XSharedPreferences {
     public XSharedPreferences(String pkg, String name) {}
     public void makeWorldReadable() {}
     public void reload() {}
@@ -131,23 +135,8 @@ public class XSharedPreferences implements SharedPreferences {
     public boolean getBoolean(String k, boolean d) { return d; }
     public long getLong(String k, long d) { return d; }
     public float getFloat(String k, float d) { return d; }
-    public Set<String> getStringSet(String k, Set<String> d) { return d; }
+    public Set<String> getStringSet(String k, Set<String> d) { return d == null ? new HashSet<>() : d; }
     public boolean contains(String k) { return false; }
-    public Editor edit() { return new Editor(); }
-    public void registerOnSharedPreferenceChangeListener(SharedPreferences.OnSharedPreferenceChangeListener l) {}
-    public void unregisterOnSharedPreferenceChangeListener(SharedPreferences.OnSharedPreferenceChangeListener l) {}
-    public static class Editor implements SharedPreferences.Editor {
-        public Editor putString(String k, String v) { return this; }
-        public Editor putInt(String k, int v) { return this; }
-        public Editor putBoolean(String k, boolean v) { return this; }
-        public Editor putLong(String k, long v) { return this; }
-        public Editor putFloat(String k, float v) { return this; }
-        public Editor putStringSet(String k, Set<String> v) { return this; }
-        public Editor remove(String k) { return this; }
-        public Editor clear() { return this; }
-        public boolean commit() { return true; }
-        public void apply() {}
-    }
 }
 EOF
 
