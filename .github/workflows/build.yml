@@ -25,31 +25,188 @@ jobs:
 
     - name: Download or create XposedBridgeAPI.jar
       run: |
-        mkdir -p app/libs
-        # Try official XposedBridge repo first
-        curl -sL "https://github.com/rovo89/XposedBridge/raw/art/api/82/XposedBridgeApi.jar" -o app/libs/XposedBridgeAPI.jar
-        # If download fails or file is too small, create stub
+        mkdir -p app/libs stub/de/robv/android/xposed stub/de/robv/android/xposed/callbacks
+
+        # Try multiple download sources
+        curl -sL "https://github.com/LSPosed/LSPosed.github.io/raw/main/art/build/82/XposedBridgeApi.jar" -o app/libs/XposedBridgeAPI.jar && echo "Downloaded from LSPosed" || true
         if [ ! -s app/libs/XposedBridgeAPI.jar ]; then
-          curl -sL "https://github.com/rovo89/XposedBridge/raw/master/api/82/XposedBridgeApi.jar" -o app/libs/XposedBridgeAPI.jar
+          curl -sL "https://github.com/rovo89/XposedBridge/raw/art/api/90/XposedBridgeApi.jar" -o app/libs/XposedBridgeAPI.jar && echo "Downloaded from rovo89/art/90" || true
         fi
         if [ ! -s app/libs/XposedBridgeAPI.jar ]; then
-          # Create a minimal stub JAR for compilation
-          mkdir -p stub/de/robv/android/xposed
-          echo "package de.robv.android.xposed;" > stub/de/robv/android/xposed/IXposedHookLoadPackage.java
-          echo "public interface IXposedHookLoadPackage { void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable; }" >> stub/de/robv/android/xposed/IXposedHookLoadPackage.java
-          echo "package de.robv.android.xposed;" > stub/de/robv/android/xposed/XC_LoadPackage.java
-          echo "public class XC_LoadPackage { public static class LoadPackageParam { public String packageName; public Object appInfo; public Object loadedApk; } }" >> stub/de/robv/android/xposed/XC_LoadPackage.java
-          echo "package de.robv.android.xposed;" > stub/de/robv/android/xposed/XC_MethodHook.java
-          echo "public abstract class XC_MethodHook { protected void beforeHookedMethod(MethodHookParam param) throws Throwable {} protected void afterHookedMethod(MethodHookParam param) throws Throwable {} public static class MethodHookParam { public Object thisObject; public Object[] args; public Object result; public Object getResult() { return result; } public void setResult(Object r) { result = r; } } }" >> stub/de/robv/android/xposed/XC_MethodHook.java
-          echo "package de.robv.android.xposed;" > stub/de/robv/android/xposed/XposedBridge.java
-          echo "public class XposedBridge { public static void log(String msg) { System.out.println(msg); } public static Object invokeOriginalMethod(Object method, Object thisObject, Object[] args) { return null; } }" >> stub/de/robv/android/xposed/XposedBridge.java
-          echo "package de.robv.android.xposed;" > stub/de/robv/android/xposed/XposedHelpers.java
-          echo "public class XposedHelpers { public static Object getObjectField(Object obj, String field) { return null; } public static void setObjectField(Object obj, String field, Object value) {} public static Object callMethod(Object obj, String method, Object... args) { return null; } public static Object callStaticMethod(Class<?> clazz, String method, Object... args) { return null; } public static Class<?> findClass(String className, ClassLoader cl) { return null; } public static Object findAndHookMethod(Class<?> clazz, String methodName, Object... paramTypes) { return null; } }" >> stub/de/robv/android/xposed/XposedHelpers.java
-          echo "package de.robv.android.xposed.callbacks;" > stub/de/robv/android/xposed/callbacks/XC_LoadPackage.java
-          echo "package de.robv.android.xposed;" > stub/de/robv/android/xposed/callbacks/package.java
-          echo "package de.robv.android.xposed.callbacks; import de.robv.android.xposed.*; public class XC_LoadPackage { public static class LoadPackageParam { public String packageName; } }" > stub/de/robv/android/xposed/callbacks/XC_LoadPackage.java
-          cd stub && find . -name "*.java" | xargs javac -d .. && cd .. && jar cf app/libs/XposedBridgeAPI.jar de/robv/android/xposed/*.class de/robv/android/xposed/callbacks/*.class 2>/dev/null
-          echo "Created stub XposedBridgeAPI.jar"
+          curl -sL "https://github.com/rovo89/XposedBridge/raw/master/art/api/90/XposedBridgeApi.jar" -o app/libs/XposedBridgeAPI.jar && echo "Downloaded from rovo89/master" || true
+        fi
+
+        # Validate JAR
+        if [ -s app/libs/XposedBridgeAPI.jar ] && file app/libs/XposedBridgeAPI.jar | grep -q "Zip archive"; then
+          echo "Valid XposedBridgeAPI.jar found"
+        else
+          echo "Download failed, generating stub JAR..."
+          rm -f app/libs/XposedBridgeAPI.jar
+
+          # Generate stub source files
+          cat > stub/de/robv/android/xposed/IXposedHookLoadPackage.java << 'JAVA_EOF'
+package de.robv.android.xposed;
+public interface IXposedHookLoadPackage {
+    void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable;
+}
+JAVA_EOF
+
+          cat > stub/de/robv/android/xposed/XC_LoadPackage.java << 'JAVA_EOF'
+package de.robv.android.xposed;
+public class XC_LoadPackage {
+    public static class LoadPackageParam {
+        public String packageName;
+        public ClassLoader classLoader;
+        public Object appInfo;
+        public Object loadedApk;
+    }
+}
+JAVA_EOF
+
+          cat > stub/de/robv/android/xposed/XC_MethodHook.java << 'JAVA_EOF'
+package de.robv.android.xposed;
+public abstract class XC_MethodHook {
+    public static class MethodHookParam {
+        public Object thisObject;
+        public Object[] args;
+        public Object result;
+        public Throwable throwable;
+        public Object getResult() { return result; }
+        public void setResult(Object r) { result = r; }
+        public Throwable getThrowable() { return throwable; }
+        public void setThrowable(Throwable t) { throwable = t; }
+    }
+    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {}
+    protected void afterHookedMethod(MethodHookParam param) throws Throwable {}
+}
+JAVA_EOF
+
+          cat > stub/de/robv/android/xposed/XposedBridge.java << 'JAVA_EOF'
+package de.robv.android.xposed;
+public class XposedBridge {
+    public static void log(String msg) { System.out.println("[Xposed] " + msg); }
+    public static Object invokeOriginalMethod(Object method, Object thisObject, Object[] args) throws Throwable { return null; }
+}
+JAVA_EOF
+
+          cat > stub/de/robv/android/xposed/XposedHelpers.java << 'JAVA_EOF'
+package de.robv.android.xposed;
+import java.lang.reflect.*;
+public class XposedHelpers {
+    public static Object getObjectField(Object obj, String field) {
+        try {
+            Field f = obj.getClass().getDeclaredField(field);
+            f.setAccessible(true);
+            return f.get(obj);
+        } catch (Exception e) { return null; }
+    }
+    public static void setObjectField(Object obj, String field, Object value) {
+        try {
+            Field f = obj.getClass().getDeclaredField(field);
+            f.setAccessible(true);
+            f.set(obj, value);
+        } catch (Exception ignored) {}
+    }
+    public static void setIntField(Object obj, String field, int value) {
+        try {
+            Field f = obj.getClass().getDeclaredField(field);
+            f.setAccessible(true);
+            f.setInt(obj, value);
+        } catch (Exception ignored) {}
+    }
+    public static void setBooleanField(Object obj, String field, boolean value) {
+        try {
+            Field f = obj.getClass().getDeclaredField(field);
+            f.setAccessible(true);
+            f.setBoolean(obj, value);
+        } catch (Exception ignored) {}
+    }
+    public static Object callMethod(Object obj, String method, Object... args) {
+        try {
+            for (Method m : obj.getClass().getDeclaredMethods()) {
+                if (m.getName().equals(method) && m.getParameterCount() == args.length) {
+                    m.setAccessible(true); return m.invoke(obj, args);
+                }
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+    public static Object callStaticMethod(Class<?> clazz, String method, Object... args) {
+        try {
+            for (Method m : clazz.getDeclaredMethods()) {
+                if (m.getName().equals(method) && m.getParameterCount() == args.length) {
+                    m.setAccessible(true); return m.invoke(null, args);
+                }
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+    public static Class<?> findClass(String className, ClassLoader cl) {
+        try { return Class.forName(className, false, cl); } catch (Exception e) { return null; }
+    }
+    public static Object newInstance(Class<?> clazz, Object... args) {
+        try {
+            for (Constructor<?> c : clazz.getDeclaredConstructors()) {
+                if (c.getParameterCount() == args.length) {
+                    c.setAccessible(true); return c.newInstance(args);
+                }
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+    public static Object findAndHookMethod(Class<?> clazz, String methodName, Object... args) { return null; }
+}
+JAVA_EOF
+
+          cat > stub/de/robv/android/xposed/XSharedPreferences.java << 'JAVA_EOF'
+package de.robv.android.xposed;
+import android.content.SharedPreferences;
+public class XSharedPreferences implements SharedPreferences {
+    private final android.content.SharedPreferences inner;
+    public XSharedPreferences(String modulePackage, String prefsName) {
+        android.content.Context ctx = null;
+        this.inner = null;
+    }
+    public void makeWorldReadable() {}
+    public void reload() {}
+    public String getString(String key, String defValue) { return defValue; }
+    public int getInt(String key, int defValue) { return defValue; }
+    public boolean getBoolean(String key, boolean defValue) { return defValue; }
+    public long getLong(String key, long defValue) { return defValue; }
+    public float getFloat(String key, float defValue) { return defValue; }
+    public java.util.Set<String> getStringSet(String key, java.util.Set<String> defValues) { return defValues; }
+    public boolean contains(String key) { return false; }
+    public android.content.SharedPreferences.Editor edit() { return inner != null ? inner.edit() : new android.content.SharedPreferences.Editor() {
+        public android.content.SharedPreferences.Editor putString(String k, String v) { return this; }
+        public android.content.SharedPreferences.Editor putInt(String k, int v) { return this; }
+        public android.content.SharedPreferences.Editor putBoolean(String k, boolean v) { return this; }
+        public android.content.SharedPreferences.Editor putLong(String k, long v) { return this; }
+        public android.content.SharedPreferences.Editor putFloat(String k, float v) { return this; }
+        public android.content.SharedPreferences.Editor putStringSet(String k, java.util.Set<String> v) { return this; }
+        public android.content.SharedPreferences.Editor remove(String k) { return this; }
+        public android.content.SharedPreferences.Editor clear() { return this; }
+        public boolean commit() { return true; }
+        public void apply() {}
+    }; }
+    public void registerOnSharedPreferenceChangeListener(android.content.SharedPreferences.OnSharedPreferenceChangeListener l) {}
+    public void unregisterOnSharedPreferenceChangeListener(android.content.SharedPreferences.OnSharedPreferenceChangeListener l) {}
+}
+JAVA_EOF
+
+          cat > stub/de/robv/android/xposed/callbacks/package.java << 'JAVA_EOF'
+package de.robv.android.xposed.callbacks;
+JAVA_EOF
+
+          # Compile with absolute paths
+          STUB_OUT=$(pwd)/stub_out
+          mkdir -p "$STUB_OUT"
+          javac -d "$STUB_OUT" stub/de/robv/android/xposed/*.java stub/de/robv/android/xposed/callbacks/*.java 2>&1
+          if [ -d "$STUB_OUT" ]; then
+            jar cf app/libs/XposedBridgeAPI.jar -C "$STUB_OUT" de 2>&1 || echo "jar command failed"
+            ls -la app/libs/
+          else
+            echo "Compilation failed"
+          fi
         fi
         ls -la app/libs/
 
