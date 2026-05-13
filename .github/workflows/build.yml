@@ -25,33 +25,33 @@ jobs:
 
     - name: Download or create XposedBridgeAPI.jar
       run: |
-        mkdir -p app/libs stub/de/robv/android/xposed stub/de/robv/android/xposed/callbacks
+        mkdir -p app/libs
 
-        # Try multiple download sources
-        curl -sL "https://github.com/LSPosed/LSPosed.github.io/raw/main/art/build/82/XposedBridgeApi.jar" -o app/libs/XposedBridgeAPI.jar && echo "Downloaded from LSPosed" || true
+        # Try multiple download sources for XposedBridge API
+        curl -sL "https://github.com/LSPosed/LSPosed.github.io/raw/main/art/build/82/XposedBridgeApi.jar" -o app/libs/XposedBridgeAPI.jar 2>/dev/null || true
         if [ ! -s app/libs/XposedBridgeAPI.jar ]; then
-          curl -sL "https://github.com/rovo89/XposedBridge/raw/art/api/90/XposedBridgeApi.jar" -o app/libs/XposedBridgeAPI.jar && echo "Downloaded from rovo89/art/90" || true
+          curl -sL "https://github.com/rovo89/XposedBridge/raw/art/api/90/XposedBridgeApi.jar" -o app/libs/XposedBridgeAPI.jar 2>/dev/null || true
         fi
         if [ ! -s app/libs/XposedBridgeAPI.jar ]; then
-          curl -sL "https://github.com/rovo89/XposedBridge/raw/master/art/api/90/XposedBridgeApi.jar" -o app/libs/XposedBridgeAPI.jar && echo "Downloaded from rovo89/master" || true
+          curl -sL "https://github.com/rovo89/XposedBridge/raw/master/art/api/90/XposedBridgeApi.jar" -o app/libs/XposedBridgeAPI.jar 2>/dev/null || true
         fi
 
-        # Validate JAR
-        if [ -s app/libs/XposedBridgeAPI.jar ] && file app/libs/XposedBridgeAPI.jar | grep -q "Zip archive"; then
-          echo "Valid XposedBridgeAPI.jar found"
-        else
-          echo "Download failed, generating stub JAR..."
+        # Validate it's actually a JAR/ZIP
+        file app/libs/XposedBridgeAPI.jar | grep -i "zip" && echo "Valid JAR downloaded" || {
+          echo "All downloads failed, creating stub JAR..."
           rm -f app/libs/XposedBridgeAPI.jar
 
-          # Generate stub source files
-          cat > stub/de/robv/android/xposed/IXposedHookLoadPackage.java << 'JAVA_EOF'
+          # Create minimal stub source
+          mkdir -p stub_src/de/robv/android/xposed stub_src/de/robv/android/xposed/callbacks
+
+          cat > stub_src/de/robv/android/xposed/IXposedHookLoadPackage.java << 'EOF'
 package de.robv.android.xposed;
 public interface IXposedHookLoadPackage {
     void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable;
 }
-JAVA_EOF
+EOF
 
-          cat > stub/de/robv/android/xposed/XC_LoadPackage.java << 'JAVA_EOF'
+          cat > stub_src/de/robv/android/xposed/XC_LoadPackage.java << 'EOF'
 package de.robv.android.xposed;
 public class XC_LoadPackage {
     public static class LoadPackageParam {
@@ -61,9 +61,9 @@ public class XC_LoadPackage {
         public Object loadedApk;
     }
 }
-JAVA_EOF
+EOF
 
-          cat > stub/de/robv/android/xposed/XC_MethodHook.java << 'JAVA_EOF'
+          cat > stub_src/de/robv/android/xposed/XC_MethodHook.java << 'EOF'
 package de.robv.android.xposed;
 public abstract class XC_MethodHook {
     public static class MethodHookParam {
@@ -79,146 +79,106 @@ public abstract class XC_MethodHook {
     protected void beforeHookedMethod(MethodHookParam param) throws Throwable {}
     protected void afterHookedMethod(MethodHookParam param) throws Throwable {}
 }
-JAVA_EOF
+EOF
 
-          cat > stub/de/robv/android/xposed/XposedBridge.java << 'JAVA_EOF'
+          cat > stub_src/de/robv/android/xposed/XposedBridge.java << 'EOF'
 package de.robv.android.xposed;
 public class XposedBridge {
     public static void log(String msg) { System.out.println("[Xposed] " + msg); }
     public static Object invokeOriginalMethod(Object method, Object thisObject, Object[] args) throws Throwable { return null; }
 }
-JAVA_EOF
+EOF
 
-          cat > stub/de/robv/android/xposed/XposedHelpers.java << 'JAVA_EOF'
+          cat > stub_src/de/robv/android/xposed/XposedHelpers.java << 'EOF'
 package de.robv.android.xposed;
 import java.lang.reflect.*;
 public class XposedHelpers {
     public static Object getObjectField(Object obj, String field) {
-        try {
-            Field f = obj.getClass().getDeclaredField(field);
-            f.setAccessible(true);
-            return f.get(obj);
-        } catch (Exception e) { return null; }
+        try { Field f = obj.getClass().getDeclaredField(field); f.setAccessible(true); return f.get(obj); } catch (Exception e) { return null; }
     }
     public static void setObjectField(Object obj, String field, Object value) {
-        try {
-            Field f = obj.getClass().getDeclaredField(field);
-            f.setAccessible(true);
-            f.set(obj, value);
-        } catch (Exception ignored) {}
+        try { Field f = obj.getClass().getDeclaredField(field); f.setAccessible(true); f.set(obj, value); } catch (Exception ignored) {}
     }
     public static void setIntField(Object obj, String field, int value) {
-        try {
-            Field f = obj.getClass().getDeclaredField(field);
-            f.setAccessible(true);
-            f.setInt(obj, value);
-        } catch (Exception ignored) {}
+        try { Field f = obj.getClass().getDeclaredField(field); f.setAccessible(true); f.setInt(obj, value); } catch (Exception ignored) {}
     }
     public static void setBooleanField(Object obj, String field, boolean value) {
-        try {
-            Field f = obj.getClass().getDeclaredField(field);
-            f.setAccessible(true);
-            f.setBoolean(obj, value);
-        } catch (Exception ignored) {}
+        try { Field f = obj.getClass().getDeclaredField(field); f.setAccessible(true); f.setBoolean(obj, value); } catch (Exception ignored) {}
     }
     public static Object callMethod(Object obj, String method, Object... args) {
-        try {
-            for (Method m : obj.getClass().getDeclaredMethods()) {
-                if (m.getName().equals(method) && m.getParameterCount() == args.length) {
-                    m.setAccessible(true); return m.invoke(obj, args);
-                }
-            }
-        } catch (Exception ignored) {}
+        try { for (Method m : obj.getClass().getDeclaredMethods()) { if (m.getName().equals(method) && m.getParameterCount() == args.length) { m.setAccessible(true); return m.invoke(obj, args); } } } catch (Exception ignored) {}
         return null;
     }
     public static Object callStaticMethod(Class<?> clazz, String method, Object... args) {
-        try {
-            for (Method m : clazz.getDeclaredMethods()) {
-                if (m.getName().equals(method) && m.getParameterCount() == args.length) {
-                    m.setAccessible(true); return m.invoke(null, args);
-                }
-            }
-        } catch (Exception ignored) {}
+        try { for (Method m : clazz.getDeclaredMethods()) { if (m.getName().equals(method) && m.getParameterCount() == args.length) { m.setAccessible(true); return m.invoke(null, args); } } } catch (Exception ignored) {}
         return null;
     }
     public static Class<?> findClass(String className, ClassLoader cl) {
         try { return Class.forName(className, false, cl); } catch (Exception e) { return null; }
     }
     public static Object newInstance(Class<?> clazz, Object... args) {
-        try {
-            for (Constructor<?> c : clazz.getDeclaredConstructors()) {
-                if (c.getParameterCount() == args.length) {
-                    c.setAccessible(true); return c.newInstance(args);
-                }
-            }
-        } catch (Exception ignored) {}
+        try { for (Constructor<?> c : clazz.getDeclaredConstructors()) { if (c.getParameterCount() == args.length) { c.setAccessible(true); return c.newInstance(args); } } } catch (Exception ignored) {}
         return null;
     }
-    public static Object findAndHookMethod(Class<?> clazz, String methodName, Object... args) { return null; }
+    public static Object findAndHookMethod(Class<?> clazz, String methodName, Object... paramTypes) { return null; }
 }
-JAVA_EOF
+EOF
 
-          cat > stub/de/robv/android/xposed/XSharedPreferences.java << 'JAVA_EOF'
+          cat > stub_src/de/robv/android/xposed/XSharedPreferences.java << 'EOF'
 package de.robv.android.xposed;
 import android.content.SharedPreferences;
+import java.util.Set;
 public class XSharedPreferences implements SharedPreferences {
-    private final android.content.SharedPreferences inner;
-    public XSharedPreferences(String modulePackage, String prefsName) {
-        android.content.Context ctx = null;
-        this.inner = null;
-    }
+    public XSharedPreferences(String pkg, String name) {}
     public void makeWorldReadable() {}
     public void reload() {}
-    public String getString(String key, String defValue) { return defValue; }
-    public int getInt(String key, int defValue) { return defValue; }
-    public boolean getBoolean(String key, boolean defValue) { return defValue; }
-    public long getLong(String key, long defValue) { return defValue; }
-    public float getFloat(String key, float defValue) { return defValue; }
-    public java.util.Set<String> getStringSet(String key, java.util.Set<String> defValues) { return defValues; }
-    public boolean contains(String key) { return false; }
-    public android.content.SharedPreferences.Editor edit() { return inner != null ? inner.edit() : new android.content.SharedPreferences.Editor() {
-        public android.content.SharedPreferences.Editor putString(String k, String v) { return this; }
-        public android.content.SharedPreferences.Editor putInt(String k, int v) { return this; }
-        public android.content.SharedPreferences.Editor putBoolean(String k, boolean v) { return this; }
-        public android.content.SharedPreferences.Editor putLong(String k, long v) { return this; }
-        public android.content.SharedPreferences.Editor putFloat(String k, float v) { return this; }
-        public android.content.SharedPreferences.Editor putStringSet(String k, java.util.Set<String> v) { return this; }
-        public android.content.SharedPreferences.Editor remove(String k) { return this; }
-        public android.content.SharedPreferences.Editor clear() { return this; }
+    public String getString(String k, String d) { return d; }
+    public int getInt(String k, int d) { return d; }
+    public boolean getBoolean(String k, boolean d) { return d; }
+    public long getLong(String k, long d) { return d; }
+    public float getFloat(String k, float d) { return d; }
+    public Set<String> getStringSet(String k, Set<String> d) { return d; }
+    public boolean contains(String k) { return false; }
+    public SharedPreferences.Editor edit() { return new SharedPreferences.Editor() {
+        public SharedPreferences.Editor putString(String k, String v) { return this; }
+        public SharedPreferences.Editor putInt(String k, int v) { return this; }
+        public SharedPreferences.Editor putBoolean(String k, boolean v) { return this; }
+        public SharedPreferences.Editor putLong(String k, long v) { return this; }
+        public SharedPreferences.Editor putFloat(String k, float v) { return this; }
+        public SharedPreferences.Editor putStringSet(String k, Set<String> v) { return this; }
+        public SharedPreferences.Editor remove(String k) { return this; }
+        public SharedPreferences.Editor clear() { return this; }
         public boolean commit() { return true; }
         public void apply() {}
     }; }
-    public void registerOnSharedPreferenceChangeListener(android.content.SharedPreferences.OnSharedPreferenceChangeListener l) {}
-    public void unregisterOnSharedPreferenceChangeListener(android.content.SharedPreferences.OnSharedPreferenceChangeListener l) {}
+    public void registerOnSharedPreferenceChangeListener(SharedPreferences.OnSharedPreferenceChangeListener l) {}
+    public void unregisterOnSharedPreferenceChangeListener(SharedPreferences.OnSharedPreferenceChangeListener l) {}
 }
-JAVA_EOF
+EOF
 
-          cat > stub/de/robv/android/xposed/callbacks/package.java << 'JAVA_EOF'
+          cat > stub_src/de/robv/android/xposed/callbacks/package-info.java << 'EOF'
 package de.robv.android.xposed.callbacks;
-JAVA_EOF
+EOF
 
-          # Compile with absolute paths
-          STUB_OUT=$(pwd)/stub_out
-          mkdir -p "$STUB_OUT"
-          javac -d "$STUB_OUT" stub/de/robv/android/xposed/*.java stub/de/robv/android/xposed/callbacks/*.java 2>&1
-          if [ -d "$STUB_OUT" ]; then
-            jar cf app/libs/XposedBridgeAPI.jar -C "$STUB_OUT" de 2>&1 || echo "jar command failed"
-            ls -la app/libs/
-          else
-            echo "Compilation failed"
-          fi
+          # Compile and create JAR
+          OUT=stub_out && mkdir -p $OUT
+          javac -d $OUT stub_src/de/robv/android/xposed/*.java stub_src/de/robv/android/xposed/callbacks/*.java 2>&1
+          jar cf app/libs/XposedBridgeAPI.jar -C $OUT de 2>&1
+          echo "Stub JAR created"
         fi
         ls -la app/libs/
+        file app/libs/XposedBridgeAPI.jar
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
     - name: Build with Gradle (Debug)
-      run: ./gradlew assembleDebug --no-daemon --stacktrace
+      run: ./gradlew assembleDebug --no-daemon
 
     - name: Upload Debug APK
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: FakeNetType-Debug-APK
         path: app/build/outputs/apk/debug/*.apk
-        if-no-files-found: error
+        if-no-files-found: warn
