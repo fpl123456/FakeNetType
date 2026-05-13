@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="network_types">
+        <item>以太网 (Ethernet)</item>
+        <item>WiFi</item>
+        <item>移动网络 (Mobile)</item>
+        <item>VPN</item>
+        <item>蓝牙 (Bluetooth)</item>
+    </string-array>
+</resources>
